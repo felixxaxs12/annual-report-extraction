@@ -10,6 +10,8 @@ Extract Strategic Report and CSR/ESG/Sustainability sections from annual report 
 
 ## Quick Start
 
+Step 1: extract Markdown files from annual report PDFs.
+
 ```bash
 python -m lto_extractor.extract_sections \
   --input-dir data/sample_pdfs \
@@ -21,7 +23,12 @@ python -m lto_extractor.extract_sections \
   --output-dir data/extracted_markdown \
   --include-standalone-csr
 
-python -m lto_extractor.validate_extractions \
+```
+
+Step 2: validate the extracted Markdown against the source PDFs.
+
+```bash
+python -m lto_extractor.auto_validate \
   --pdf-dir data/sample_pdfs \
   --md-dir data/extracted_markdown
 ```
@@ -59,7 +66,7 @@ python -m lto_extractor.auto_validate \
   --ocr-cache-dir data/ocr_cache
 ```
 
-OCR options are available in `extract_sections`, `validate_extractions`, and `auto_validate`:
+OCR options are available in `extract_sections` and `auto_validate`:
 
 - `--ocr auto`: use the PDF text layer when present; otherwise use OCR.
 - `--ocr always`: force OCR even when a text layer exists.
@@ -73,7 +80,15 @@ For text-based PDFs, the existing workflow remains unchanged and should continue
 
 ## Automated Validation and Self-Repair
 
-Use `auto_validate` when you want an agent-like extraction loop instead of a separate extract-then-check workflow:
+Use `auto_validate` with `--md-dir` when you only want to validate existing Markdown files:
+
+```bash
+python -m lto_extractor.auto_validate \
+  --pdf-dir data/sample_pdfs \
+  --md-dir data/extracted_markdown
+```
+
+Use `auto_validate` with `--input-dir` and `--output-dir` when you want an agent-like extraction loop instead of a separate extract-then-check workflow:
 
 ```bash
 python -m lto_extractor.auto_validate \
