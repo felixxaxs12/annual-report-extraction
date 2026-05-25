@@ -10,27 +10,54 @@ Extract Strategic Report and CSR/ESG/Sustainability sections from annual report 
 
 ## Quick Start
 
+Clone the repository, install dependencies, and create the working folders:
+
+```bash
+git clone https://github.com/felixxaxs12/lto-section-extractor.git
+cd lto-section-extractor
+
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+mkdir -p data/input_pdfs data/extracted_markdown data/ocr_cache reports
+```
+
+Put the annual report PDFs to process in:
+
+```text
+data/input_pdfs/
+```
+
 Step 1: extract Markdown files from annual report PDFs.
 
 ```bash
+PYTHONPATH=src \
 python -m lto_extractor.extract_sections \
-  --input-dir data/sample_pdfs \
-  --output-dir data/extracted_markdown
+  --input-dir data/input_pdfs \
+  --output-dir data/extracted_markdown \
+  --ocr auto \
+  --ocr-cache-dir data/ocr_cache
 
 # Optional: append strict CSR/ESG sections found outside the main Strategic Report.
+PYTHONPATH=src \
 python -m lto_extractor.extract_sections \
-  --input-dir data/sample_pdfs \
+  --input-dir data/input_pdfs \
   --output-dir data/extracted_markdown \
+  --ocr auto \
+  --ocr-cache-dir data/ocr_cache \
   --include-standalone-csr
-
 ```
 
 Step 2: validate the extracted Markdown against the source PDFs.
 
 ```bash
+PYTHONPATH=src \
 python -m lto_extractor.auto_validate \
-  --pdf-dir data/sample_pdfs \
-  --md-dir data/extracted_markdown
+  --pdf-dir data/input_pdfs \
+  --md-dir data/extracted_markdown \
+  --ocr auto \
+  --ocr-cache-dir data/ocr_cache
 ```
 
 The extractor writes final Markdown files to `data/extracted_markdown/`. The validator prints a readable summary by default and only writes a CSV if you explicitly pass `--out path.csv`.
@@ -43,25 +70,30 @@ Markdown output is optimized for LLM reading:
 - decorative/non-text visuals are marked as `[Image omitted]`;
 - isolated page numbers, chart axes, and numeric fragments are filtered where possible.
 
-Use the project virtual environment if available:
-
-```bash
-/Users/yizhao/Documents/workstudy/accounting_data_research/agent_extractor/.venv/bin/python -m lto_extractor.extract_sections ...
-```
-
 ## Scanned PDFs and OCR
 
 The extractor now supports scanned annual reports through OCR. By default, `--ocr auto` first checks whether the PDF has a usable text layer. If it does, the old text-layer workflow is used. If not, the code falls back to OCR.
 
-OCR requires the `tesseract` executable. The local project setup currently checks `PATH`, `TESSERACT_CMD`, and the bundled OCR environment at `/Users/yizhao/Documents/Workstudy_Accounting_Data_Managment/.tools/ocr-env/bin/tesseract`. Without a usable backend, scanned PDFs will fail with `ocr_unavailable` instead of producing misleading empty Markdown.
+OCR requires the `tesseract` executable. Install it separately and make sure it is available on `PATH`. Alternatively, set `TESSERACT_CMD` to the full path of the executable. Without a usable backend, scanned PDFs will fail with `ocr_unavailable` instead of producing misleading empty Markdown.
+
+Common install options:
+
+```bash
+# macOS with Homebrew
+brew install tesseract
+
+# Conda / Mamba
+conda install -c conda-forge tesseract
+```
 
 Recommended command for scanned PDFs:
 
 ```bash
+PYTHONPATH=src \
 python -m lto_extractor.auto_validate \
-  --input-dir /Users/yizhao/Documents/workstudy/accounting_data_research/PDF_scanned \
-  --output-dir data/scanned_test_markdown \
-  --audit-out reports/scanned_auto_validation_audit.jsonl \
+  --input-dir data/input_pdfs \
+  --output-dir data/extracted_markdown \
+  --audit-out reports/auto_validation_audit.jsonl \
   --ocr auto \
   --ocr-cache-dir data/ocr_cache
 ```
@@ -83,18 +115,24 @@ For text-based PDFs, the existing workflow remains unchanged and should continue
 Use `auto_validate` with `--md-dir` when you only want to validate existing Markdown files:
 
 ```bash
+PYTHONPATH=src \
 python -m lto_extractor.auto_validate \
-  --pdf-dir data/sample_pdfs \
-  --md-dir data/extracted_markdown
+  --pdf-dir data/input_pdfs \
+  --md-dir data/extracted_markdown \
+  --ocr auto \
+  --ocr-cache-dir data/ocr_cache
 ```
 
 Use `auto_validate` with `--input-dir` and `--output-dir` when you want an agent-like extraction loop instead of a separate extract-then-check workflow:
 
 ```bash
+PYTHONPATH=src \
 python -m lto_extractor.auto_validate \
-  --input-dir data/sample_pdfs \
+  --input-dir data/input_pdfs \
   --output-dir data/extracted_markdown \
-  --audit-out reports/auto_validation_audit.jsonl
+  --audit-out reports/auto_validation_audit.jsonl \
+  --ocr auto \
+  --ocr-cache-dir data/ocr_cache
 ```
 
 The loop does:
