@@ -1,12 +1,12 @@
 # LTO Strategic Report Extractor
 
-Extract Strategic Report and CSR/ESG/Sustainability sections from annual report PDFs, then validate whether the Markdown output contains the desired sections and excludes governance/financial-statement material.
+Extract Strategic Report and CSR/ESG/Sustainability sections from annual report PDFs, then validate whether the Markdown output is internally consistent and excludes obvious governance/financial-statement material.
 
 ## Goals
 
 - Preserve Strategic Report content, including Chairman's statement, CEO/Chief Executive statement, business review, strategy, risks, KPIs, operating review, financial review inside the Strategic Report, and CSR/ESG/Sustainability content.
 - Exclude Corporate Governance, Directors' Report, Board biographies, Remuneration Report, Financial Statements, notes, auditor reports, shareholder information, AGM notices, and appendices.
-- Produce a validation report that flags likely extraction errors before LTO coding.
+- Produce a Markdown validation report that flags metadata/page-marker inconsistencies and obvious excluded-section pollution before LTO coding.
 
 ## Quick Start
 
@@ -49,15 +49,13 @@ python -m lto_extractor.extract_sections \
   --include-standalone-csr
 ```
 
-Step 2: validate the extracted Markdown against the source PDFs.
+Step 2: validate the extracted Markdown artifacts.
 
 ```bash
 PYTHONPATH=src \
-python -m lto_extractor.auto_validate \
-  --pdf-dir data/input_pdfs \
+python -m lto_extractor.validator \
   --md-dir data/extracted_markdown \
-  --ocr auto \
-  --ocr-cache-dir data/ocr_cache
+  --out reports/markdown_validation.csv
 ```
 
 The extractor writes final Markdown files to `data/extracted_markdown/`. The validator prints a readable summary by default and only writes a CSV if you explicitly pass `--out path.csv`.
@@ -86,19 +84,7 @@ brew install tesseract
 conda install -c conda-forge tesseract
 ```
 
-Recommended command for scanned PDFs:
-
-```bash
-PYTHONPATH=src \
-python -m lto_extractor.auto_validate \
-  --input-dir data/input_pdfs \
-  --output-dir data/extracted_markdown \
-  --audit-out reports/auto_validation_audit.jsonl \
-  --ocr auto \
-  --ocr-cache-dir data/ocr_cache
-```
-
-OCR options are available in `extract_sections` and `auto_validate`:
+OCR options are available in `extract_sections`:
 
 - `--ocr auto`: use the PDF text layer when present; otherwise use OCR.
 - `--ocr always`: force OCR even when a text layer exists.
@@ -110,51 +96,29 @@ OCR options are available in `extract_sections` and `auto_validate`:
 For text-based PDFs, the existing workflow remains unchanged and should continue to pass validation.
 
 
-## Automated Validation and Self-Repair
+## Markdown-Only Validation
 
-Use `auto_validate` with `--md-dir` when you only want to validate existing Markdown files:
+Use `validator` to validate existing Markdown files:
 
 ```bash
 PYTHONPATH=src \
-python -m lto_extractor.auto_validate \
-  --pdf-dir data/input_pdfs \
+python -m lto_extractor.validator \
   --md-dir data/extracted_markdown \
-  --ocr auto \
-  --ocr-cache-dir data/ocr_cache
+  --out reports/markdown_validation.csv
 ```
 
-Use `auto_validate` with `--input-dir` and `--output-dir` when you want an agent-like extraction loop instead of a separate extract-then-check workflow:
+The validator is intentionally independent from PDF extraction code. It does not read source PDFs, run OCR, or repair files. It checks whether each Markdown file is self-consistent:
 
-```bash
-PYTHONPATH=src \
-python -m lto_extractor.auto_validate \
-  --input-dir data/input_pdfs \
-  --output-dir data/extracted_markdown \
-  --audit-out reports/auto_validation_audit.jsonl \
-  --ocr auto \
-  --ocr-cache-dir data/ocr_cache
+- standard metadata exists: `Source`, `SR pages`, `Detection`, and `CSR/ESG`;
+- every `<!-- pdf_page: N -->` marker is inside the declared `SR pages` range;
+- every page in the declared `SR pages` range has a corresponding page marker;
+- obvious excluded-section headings such as `Corporate Governance`, `Directors' Report`, `Remuneration Report`, `Financial Statements`, `Independent Auditor`, and committee reports are flagged;
+- standalone CSR/ESG false-positive committee contexts are flagged.
+
+The CSV schema is:
+
+```text
+markdown_file, source_pdf, detected_start, detected_end, method, csr_status, issues, suggested_fix
 ```
 
-The loop does:
-
-1. detect Strategic Report / CSR boundaries from each PDF;
-2. generate Markdown;
-3. validate the Markdown against the source PDF and content-quality rules;
-4. automatically apply deterministic repairs when safe;
-5. regenerate and revalidate until the file passes or needs manual review.
-
-Current automatic repairs include:
-
-- extending a start page when strategic/CSR content is detected immediately before the extracted range;
-- extending an end page when strategic/CSR content is detected immediately after the extracted range;
-- trimming before hard excluded sections such as governance, remuneration, auditor reports, and financial statements;
-- skipping report navigation / contents-style pages that leak headings such as `Financial statements`;
-- dropping noisy visual/navigation pages and detached visual footnotes through the extractor rules.
-
-The JSONL audit log is optional. It records each file's final status, iteration count, validation issues, and auto-repair actions.
-
-## Validation Status
-
-- `pass`: boundaries look correct and no substantial excluded section is detected.
-- `warning`: likely minor issue or ambiguous boundary requiring spot-check.
-- `fail`: likely missing required Strategic Report/CSR content or including excluded sections.
+When no issues are found, `issues` and `suggested_fix` are both `none`.
