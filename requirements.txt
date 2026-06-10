@@ -1,2 +1,1 @@
-PyMuPDF>=1.27
-
+# Current Docling JSON extractor uses only the Python standard library.

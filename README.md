@@ -1,124 +1,114 @@
-# LTO Strategic Report Extractor
+# LTO Section Extractor
 
-Extract Strategic Report and CSR/ESG/Sustainability sections from annual report PDFs, then validate whether the Markdown output is internally consistent and excludes obvious governance/financial-statement material.
+Extract machine-readable Long-Term Orientation (LTO) input from annual-report Docling JSON.
 
-## Goals
+The current workflow is JSON-first:
 
-- Preserve Strategic Report content, including Chairman's statement, CEO/Chief Executive statement, business review, strategy, risks, KPIs, operating review, financial review inside the Strategic Report, and CSR/ESG/Sustainability content.
-- Exclude Corporate Governance, Directors' Report, Board biographies, Remuneration Report, Financial Statements, notes, auditor reports, shareholder information, AGM notices, and appendices.
-- Produce a Markdown validation report that flags metadata/page-marker inconsistencies and obvious excluded-section pollution before LTO coding.
+```text
+Docling JSON
+-> Strategic Report / Governance page windows
+-> group/table/list preserving chunks
+-> high-confidence noise marked as delete
+-> Markdown for review
+-> canonical JSON for RAG
+```
 
-## Quick Start
+Archived PDF-first experiments live in `versions/legacy_pdf_first/`.
 
-Clone the repository, install dependencies, and create the working folders:
+## Current Scope
+
+The active extractor:
+
+- reads `*.docling.json` annual-report files;
+- extracts Strategic Report and Corporate Governance sections;
+- stops before Financial Statements, auditor reports, AGM/shareholder administration, and similar back matter;
+- preserves Docling tables;
+- preserves Docling groups as grouped blocks instead of splitting them into isolated fragments;
+- drops pictures and text nested under pictures;
+- marks only high-confidence noise as `status: "delete"`;
+- keeps all non-deleted content as `status: "kept"`.
+
+## Install
+
+The current Docling extractor uses only the Python standard library.
 
 ```bash
 git clone https://github.com/felixxaxs12/lto-section-extractor.git
 cd lto-section-extractor
 
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-mkdir -p data/input_pdfs data/extracted_markdown data/ocr_cache reports
 ```
 
-Put the annual report PDFs to process in:
+## Run
+
+Put Docling JSON files in:
 
 ```text
-data/input_pdfs/
+data/input_docling_json/
 ```
 
-Step 1: extract Markdown files from annual report PDFs.
+Run extraction:
 
 ```bash
-PYTHONPATH=src \
-python -m lto_extractor.extract_sections \
-  --input-dir data/input_pdfs \
-  --output-dir data/extracted_markdown \
-  --ocr auto \
-  --ocr-cache-dir data/ocr_cache
-
-# Optional: append strict CSR/ESG sections found outside the main Strategic Report.
-PYTHONPATH=src \
-python -m lto_extractor.extract_sections \
-  --input-dir data/input_pdfs \
-  --output-dir data/extracted_markdown \
-  --ocr auto \
-  --ocr-cache-dir data/ocr_cache \
-  --include-standalone-csr
+PYTHONPATH=src python3 -m lto_extractor.extract_docling_sections \
+  --input-dir data/input_docling_json \
+  --output-dir data/extracted_lto_inputs
 ```
 
-Step 2: validate the extracted Markdown artifacts.
-
-```bash
-PYTHONPATH=src \
-python -m lto_extractor.validator \
-  --md-dir data/extracted_markdown \
-  --out reports/markdown_validation.csv
-```
-
-The extractor writes final Markdown files to `data/extracted_markdown/`. The validator prints a readable summary by default and only writes a CSV if you explicitly pass `--out path.csv`.
-
-Markdown output is optimized for LLM reading:
-
-- narrative text is preserved;
-- reliable tables are marked as `[Table]` and rendered as Markdown tables;
-- KPI/trend charts are marked as `[Chart summary]` instead of copying raw axis noise;
-- decorative/non-text visuals are marked as `[Image omitted]`;
-- isolated page numbers, chart axes, and numeric fragments are filtered where possible.
-
-## Scanned PDFs and OCR
-
-The extractor now supports scanned annual reports through OCR. By default, `--ocr auto` first checks whether the PDF has a usable text layer. If it does, the old text-layer workflow is used. If not, the code falls back to OCR.
-
-OCR requires the `tesseract` executable. Install it separately and make sure it is available on `PATH`. Alternatively, set `TESSERACT_CMD` to the full path of the executable. Without a usable backend, scanned PDFs will fail with `ocr_unavailable` instead of producing misleading empty Markdown.
-
-Common install options:
-
-```bash
-# macOS with Homebrew
-brew install tesseract
-
-# Conda / Mamba
-conda install -c conda-forge tesseract
-```
-
-OCR options are available in `extract_sections`:
-
-- `--ocr auto`: use the PDF text layer when present; otherwise use OCR.
-- `--ocr always`: force OCR even when a text layer exists.
-- `--ocr never`: never use OCR.
-- `--ocr-cache-dir`: store page-level OCR text so reruns do not OCR the same report again.
-- `--ocr-lang`: Tesseract language code, default `eng`.
-- `--ocr-dpi`: render resolution for OCR, default `220`.
-
-For text-based PDFs, the existing workflow remains unchanged and should continue to pass validation.
-
-
-## Markdown-Only Validation
-
-Use `validator` to validate existing Markdown files:
-
-```bash
-PYTHONPATH=src \
-python -m lto_extractor.validator \
-  --md-dir data/extracted_markdown \
-  --out reports/markdown_validation.csv
-```
-
-The validator is intentionally independent from PDF extraction code. It does not read source PDFs, run OCR, or repair files. It checks whether each Markdown file is self-consistent:
-
-- standard metadata exists: `Source`, `SR pages`, `Detection`, and `CSR/ESG`;
-- every `<!-- pdf_page: N -->` marker is inside the declared `SR pages` range;
-- every page in the declared `SR pages` range has a corresponding page marker;
-- obvious excluded-section headings such as `Corporate Governance`, `Directors' Report`, `Remuneration Report`, `Financial Statements`, `Independent Auditor`, and committee reports are flagged;
-- standalone CSR/ESG false-positive committee contexts are flagged.
-
-The CSV schema is:
+Each report produces:
 
 ```text
-markdown_file, source_pdf, detected_start, detected_end, method, csr_status, issues, suggested_fix
+<report>_lto_input.md
+<report>_lto_document.json
 ```
 
-When no issues are found, `issues` and `suggested_fix` are both `none`.
+## JSON Output
+
+The canonical JSON is intentionally small:
+
+```json
+{
+  "schema_version": "docling_lto_document_v2",
+  "source_pdf": "Non-Stopper_Afren PLC_20131231.pdf",
+  "sections": [
+    {
+      "section_type": "strategic_report",
+      "start_page": 2,
+      "end_page": 13,
+      "chunks": [
+        {
+          "chunk_id": "strategic_report_00001",
+          "status": "kept",
+          "content_type": "paragraph",
+          "page_no": 2,
+          "heading_path": ["Strategic report"],
+          "text_md": "The Board reviews long-term strategy and principal risks."
+        }
+      ]
+    }
+  ]
+}
+```
+
+`status` is the only quality gate in the output:
+
+- `kept`: usable input for Markdown review and default RAG ingestion.
+- `delete`: high-confidence noise retained in JSON for audit, but omitted from Markdown.
+
+## Tests
+
+```bash
+PYTHONPATH=src python3 -B -m pytest -q
+```
+
+## Repository Layout
+
+```text
+src/lto_extractor/extract_docling_sections.py   # active extractor
+tests/test_extract_docling_sections.py          # active tests
+versions/legacy_pdf_first/                     # archived PDF-first implementation
+data/                                          # ignored local inputs/outputs
+reports/                                       # ignored local reports
+```
