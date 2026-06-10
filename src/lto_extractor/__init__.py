@@ -1,2 +1,1 @@
-"""Strategic Report extraction and validation tools."""
-
+"""Docling JSON extraction tools for LTO annual-report analysis."""
